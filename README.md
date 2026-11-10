@@ -4,6 +4,12 @@ Flujo de [n8n](https://n8n.io) que recibe los formularios de contacto de un siti
 
 Lo armé para el formulario de mi portfolio ([fbrizuela.com](https://fbrizuela.com)), pero sirve para cualquier sitio que pueda hacer un `POST`.
 
+![El flujo en el editor de n8n](docs/flujo-n8n.jpg)
+
+Cada contacto queda como una fila en Google Sheets; los urgentes se resaltan solos:
+
+![Planilla con los contactos guardados](docs/planilla.png)
+
 ## Qué hace
 
 ```mermaid
@@ -20,7 +26,8 @@ flowchart LR
 2. **Validar y clasificar** (nodo de código en JavaScript):
    - Normaliza los datos (recorta espacios, pasa el email a minúsculas, deja solo los dígitos del teléfono).
    - Valida que haya nombre, un email o teléfono válido y un mensaje.
-   - Clasifica la consulta por palabras clave en *Presupuesto*, *Reparación*, *Laboral* o *Consulta general*.
+   - Clasifica la consulta por palabras clave en *Presupuesto* ("precio", "cotizar", "cuánto sale"), *Reparación* ("no prende", "no imprime", "se rompió"), *Laboral* o *Consulta general*.
+   - Registra la fecha y hora de Buenos Aires en formato de 24 horas.
    - Si el mensaje dice "urgente", "hoy" o "lo antes posible", le pone **prioridad alta**.
 3. **Guardar en Google Sheets:** agrega una fila con fecha, datos, tipo y prioridad. Usa una cuenta de servicio de Google Cloud, así que no depende de un inicio de sesión personal y funciona igual en cualquier servidor.
 4. **Aviso al celular:** manda una notificación push con [ntfy](https://ntfy.sh). Los contactos urgentes llegan con prioridad alta y otro ícono.
