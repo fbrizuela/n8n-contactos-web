@@ -1,0 +1,315 @@
+{
+  "id": "bICpO83fpvwZIAcu",
+  "name": "Contactos web: validar, guardar en Sheets y avisar",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "contacto",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1",
+      "name": "Formulario web",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "contacto-fbrizuela"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normaliza y valida lo que manda el formulario\nconst b = $input.first().json.body || {};\nconst nombre = String(b.nombre || '').trim();\nconst email = String(b.email || '').trim().toLowerCase();\nconst telefono = String(b.telefono || '').replace(/[^\\d+]/g, '');\nconst mensaje = String(b.mensaje || '').trim();\n\nconst errores = [];\nif (nombre.length < 2) errores.push('Falta el nombre');\nif (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email) && telefono.length < 8) errores.push('Falta un email o teléfono válido');\nif (mensaje.length < 5) errores.push('El mensaje está vacío');\n\n// Clasificación simple por palabras clave\nconst t = mensaje.toLowerCase();\nlet tipo = 'Consulta general';\nif (/(presupuesto|precio|cu[aá]nto sale|cotiz)/.test(t)) tipo = 'Presupuesto';\nelse if (/(no anda|no prende|roto|falla|error|arregl|reparar)/.test(t)) tipo = 'Reparación';\nelse if (/(trabajo|puesto|entrevista|cv|búsqueda|busqueda)/.test(t)) tipo = 'Laboral';\nconst urgente = /(urgente|hoy|ya mismo|lo antes posible)/.test(t);\n\nreturn [{ json: {\n  valido: errores.length === 0,\n  errores,\n  fecha: new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),\n  nombre, email, telefono, mensaje, tipo,\n  prioridad: urgente ? 'Alta' : 'Normal'\n} }];"
+      },
+      "id": "a2",
+      "name": "Validar y clasificar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.valido }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a3",
+      "name": "¿Es válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://ntfy.sh/{{ $env.NTFY_TOPIC }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ 'Nuevo contacto: ' + $('Validar y clasificar').item.json.tipo }}"
+            },
+            {
+              "name": "priority",
+              "value": "={{ $('Validar y clasificar').item.json.prioridad === 'Alta' ? 'high' : 'default' }}"
+            },
+            {
+              "name": "tags",
+              "value": "={{ $('Validar y clasificar').item.json.prioridad === 'Alta' ? 'rotating_light' : 'envelope' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ $('Validar y clasificar').item.json.nombre }} ({{ $('Validar y clasificar').item.json.email || $('Validar y clasificar').item.json.telefono }})\n{{ $('Validar y clasificar').item.json.mensaje }}",
+        "options": {}
+      },
+      "id": "a4",
+      "name": "Aviso al celular (ntfy)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, tipo: $('Validar y clasificar').item.json.tipo } }}",
+        "options": {}
+      },
+      "id": "a5",
+      "name": "Responder OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, errores: $json.errores } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "a6",
+      "name": "Responder error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Hoja 1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Fecha": "={{ $json.fecha }}",
+            "Nombre": "={{ $json.nombre }}",
+            "Email": "={{ $json.email }}",
+            "Teléfono": "={{ $json.telefono }}",
+            "Tipo": "={{ $json.tipo }}",
+            "Prioridad": "={{ $json.prioridad }}",
+            "Mensaje": "={{ $json.mensaje }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Fecha",
+              "displayName": "Fecha",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Nombre",
+              "displayName": "Nombre",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Teléfono",
+              "displayName": "Teléfono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tipo",
+              "displayName": "Tipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Prioridad",
+              "displayName": "Prioridad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Mensaje",
+              "displayName": "Mensaje",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a7",
+      "name": "Guardar en Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        720,
+        200
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "gsacuenta0000001",
+          "name": "Google (cuenta de servicio)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Formulario web": {
+      "main": [
+        [
+          {
+            "node": "Validar y clasificar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar y clasificar": {
+      "main": [
+        [
+          {
+            "node": "¿Es válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es válido?": {
+      "main": [
+        [
+          {
+            "node": "Guardar en Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aviso al celular (ntfy)": {
+      "main": [
+        [
+          {
+            "node": "Responder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Aviso al celular (ntfy)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": true
+}

@@ -1,0 +1,15 @@
+{
+  "name": "n8n-contactos-web",
+  "version": "1.0.0",
+  "description": "Flujo de n8n: formulario web -> validar y clasificar -> Google Sheets -> aviso por ntfy",
+  "scripts": {
+    "start": "powershell -File iniciar.ps1 start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "n8n": "^1.123.93"
+  },
+  "private": true
+}
